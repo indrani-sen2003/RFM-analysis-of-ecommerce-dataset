@@ -1,0 +1,763 @@
+#Doing the Recency Frequency and monetory analysis of ecommerce dataset
+```{r}
+df=read.csv("d:/Ecommerce Project 2.csv")
+head(df)
+
+#displaying the stucture , the datatypes of ecom data frame
+str(df)
+```
+#need to extract numbers from InvoiceNo,Stockcode,CustomerID
+#eliminating characters from invoice_no
+```{r}
+          
+inv=gsub('[A-Z]*','',df$InvoiceNo)
+inv=as.numeric(inv)
+df$InvoiceNo=inv
+```
+
+#eliminating characters from CustomerID
+```{r}
+
+cid=gsub("[^[:alnum:]]", "",df$CustomerID)
+cid=as.numeric(cid)
+df$CustomerID=cid
+
+```
+```{r}
+#reviewing the structure of the data frame again
+str(df)
+
+
+#Analysing the missing values
+
+df_missing=sapply(df,function(x)(sum(is.na(x))))
+df_missing[df_missing>0]
+# dropping the column x as it has no values
+df_missing
+df=df[,-9]
+
+
+#removing the rows with null customer id
+df=na.omit(df)
+df_missing=sapply(df,function(x)(sum(is.na(x))))
+df_missing[df_missing>0]
+
+dim(df)
+
+```
+
+#creating a column total_price as quantity*unit_price
+
+```{r}
+
+df$tot_price=df$Quantity*df$UnitPrice
+
+str(df)
+
+View(df)
+```
+```{r}
+
+library(plyr)
+df_country=count(df$Country)
+
+
+df_country=df_country[order(df_country$freq),]
+head(df_country)
+
+#converting country to factor variables
+
+df$Country=as.factor(df$Country)
+
+
+
+```
+
+#creating columns for calculating recency freqiuency and monetory analysis
+
+```{r}
+
+#grouping the  data by customer id ,how much the customer has spend
+
+
+library(dplyr)
+
+df_price=df%>%
+  group_by(CustomerID)%>%
+  summarise("tot"=sum(tot_price))
+head(df_price)
+nrow(df_price)
+```
+
+#grouping the  data by customer id ,based on how many times they have transacted
+```{r}
+library(dplyr)
+# df_inv_cid=df %>%
+# group_by(CustomerID)%>%
+# count(InvoiceNo)
+
+
+
+df_txn=df %>%
+  group_by(CustomerID) %>%
+  summarise(count=n())
+head(df_txn)
+nrow(df_txn)
+
+
+```
+
+
+#separating date into day month and year
+```{r}
+
+library(tidyverse)
+
+df2=separate(df,"InvoiceDate",into=c("Day","Month","Year"),sep="-")
+head(df2)
+unique(df2$Month)
+```
+
+#the total transactions by month
+
+```{r}
+library(dplyr)
+install.packages("dplyr")
+df2%>%
+  group_by(Month)%>%
+  summarise(sum(tot_price))
+
+df2%>%
+  group_by(Year)%>%
+  summarise(sum(tot_price))
+
+```
+#calculating recency of each customer
+```{r}
+
+head(df)
+df$InvoiceDate=as.Date(df$InvoiceDate,format="%d-%b-%y")
+max(df$InvoiceDate)
+
+nrow(df)
+
+library(dplyr)
+df_date=df%>%
+  group_by(CustomerID)%>%
+  summarise(max(InvoiceDate))
+
+nrow(df_date)
+
+df_date$diff_in_days = difftime( max(df$InvoiceDate),df_date$`max(InvoiceDate)`, units = "days")
+
+df_date
+
+```
+#combining recency, frequency and monetory parameters in a single data frame
+```{r}
+
+rfm_matrix=data.frame(cbind("custid"=df_price$CustomerID,"recency"=df_date$diff_in_days,"frequency"=df_txn$count,"monetory"=df_price$tot))
+nrow(rfm_matrix)
+
+head(rfm_matrix)
+#install.packages("OneR")
+library("OneR")
+
+head(rfm_matrix$monetory)
+
+min(rfm_matrix$monetory)
+max(rfm_matrix$monetory)
+
+#creating bins for each variables recency, frequency and monetory
+
+#creating bins for monetory 
+
+summary(rfm_matrix$monetory)
+b <- c(-Inf,293.4,648.1,1898.5,1611.7,Inf)
+names <- c("1", "2", "3","4","5")
+rfm_matrix<-rfm_matrix%>%mutate(mon_bins = cut(monetory, breaks = b,labels=names))
+head(rfm_matrix)
+
+
+#creating bins for recency
+
+summary(rfm_matrix$recency)
+b <- c(-Inf,16,50,91.58,143,Inf)
+names <- c("5", "4", "3","2","1")
+rfm_matrix<-rfm_matrix%>%mutate(rec_bins = cut(recency, breaks = b,labels=names))
+head(rfm_matrix)
+
+
+#creating bins for frequency
+
+summary(rfm_matrix$frequency)
+b <- c(-Inf,17,42,93.5,102,Inf)
+names <- c("1", "2", "3","4","5")
+rfm_matrix<-rfm_matrix%>%mutate(freq_bins = cut(frequency, breaks = b,labels=names))
+head(rfm_matrix)
+
+
+rfm_bin=rfm_matrix[,c(1,5,7,6)]
+
+head(rfm_bin)
+str(rfm_bin)
+rfm_bin$mon_bins=as.numeric(rfm_bin$mon_bins)
+rfm_bin$rec_bins=as.numeric(rfm_bin$rec_bins)
+rfm_bin$freq_bins=as.numeric(rfm_bin$freq_bins)
+head(rfm_bin)
+head(rfm_bin)
+str(rfm_bin)
+
+head(rfm_bin)
+str(rfm_bin)
+rfm_bin$tot_score=(rfm_bin$rec_bins+rfm_bin$freq_bins+rfm_bin$mon_bins)/3
+nrow(rfm_bin)
+nrow(df)
+
+```
+
+
+#clustering based on RFM analysis
+
+```{r}
+```
+
+#Creating an elbow plot
+```{r}
+
+n=1:15
+wss=function(k){
+  kmod=kmeans(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],k)
+  kmod$tot.withinss
+  
+}
+
+
+library(tidyverse)
+wss_values=map_dbl(n,wss)
+wss_values
+
+plot(n, wss_values,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     col="red",
+     ylab="Total within-clusters sum of squares")
+```
+
+
+#making clusters by k=3
+```{r}
+
+k_mod3=kmeans(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],centers=3)
+k_mod3$cluster
+k_mod3
+
+df_mod3=cbind(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],"cluster"=k_mod3$cluster)
+df_mod3$cluster=as.factor(df_mod3$cluster)
+k_mod3
+
+head(df_mod3)
+
+head(k_mod3)
+
+```
+
+Accuracy of the cluster with number of clusters 3 =`r k_mod3$betweenss/k_mod3$totss`
+
+
+#making clusters by k=4
+```{r}
+head(rfm_bin)
+
+k_mod4=kmeans(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],centers=4)
+
+df_mod4=cbind(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],"cluster"=k_mod4$cluster)
+df_mod4$cluster=as.factor(df_mod4$cluster)
+
+head(df_mod4,20)
+
+
+head(k_mod4)
+
+```
+Accuracy of the cluster with number of clusters 4 `r k_mod4$betweenss/k_mod4$totss`
+
+#making clusters by k=6
+```{r}
+set.seed(100)
+
+k_mod6=kmeans(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],centers=6)
+
+df_mod6=cbind(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],"cluster"=k_mod6$cluster)
+df_mod6$cluster=as.factor(df_mod6$cluster)
+
+df_mod6$cluster
+
+head(df_mod6)
+
+head(k_mod6)
+
+head(rfm_bin)
+
+```
+
+Accuracy of the cluster with number of clusters 6=`r k_mod6$betweenss/k_mod6$totss`
+
+
+
+#scaling 
+```{r}
+
+summary(df_mod6)
+
+df_mod6_scale=scale(df_mod6[,c("rec_bins","freq_bins","mon_bins")],center=TRUE,scale=TRUE)
+
+summary(df_mod6_scale)
+
+kmod_61=kmeans(df_mod6_scale,centers=6)
+head(kmod_61)
+
+```
+Accuracy of the cluster with number of clusters 6 after normalisation=`r kmod_61$betweenss/kmod_61$totss`
+
+# Using the factoextra R package
+# The function fviz_cluster() [factoextra package] can be used to easily visualize k-means clusters. It takes k-means results and the original data as arguments. 
+#In the resulting plot, observations are represented by points, 
+# using principal components if the number of variables is greater than 2. 
+#It's also possible to draw concentration ellipse around each cluster.
+
+```{r}
+#install.packages("ggpubr")
+#install.packages("factoextra")
+library(ggpubr)
+library(factoextra)
+```
+
+#Compute PCA and extract individual coordinates
+
+# Dimension reduction using PCA
+
+```{r}
+df_mod6$cluster
+res.pca <- prcomp(df_mod6[,c("rec_bins","freq_bins","mon_bins")],  scale = TRUE)
+# Coordinates of individuals
+ind.coord <- as.data.frame(get_pca_ind(res.pca)$coord)
+# Add clusters obtained using the K-means algorithm
+ind.coord$cluster <- factor(df_mod6$cluster)
+# Data inspection
+
+
+k_mod6=kmeans(rfm_bin[,c("mon_bins","rec_bins","freq_bins")],centers=6)
+df_mod6=cbind(rfm_bin[,c("mon_bins","rec_bins","freq_bins")],"cluster"=k_mod6$cluster)
+df_mod6$cluster=as.factor(df_mod6$cluster)
+head(df_mod6)
+head(k_mod6)
+
+df_mod6$cluster
+res.pca <- prcomp(df_mod6[,c("mon_bins","rec_bins","freq_bins")],  scale = TRUE)
+# Coordinates of individuals
+ind.coord <- as.data.frame(get_pca_ind(res.pca)$coord)
+# Add clusters obtained using the K-means algorithm
+ind.coord$cluster <- factor(df_mod6$cluster)
+```
+# Data inspection
+```{r}
+
+eigenvalue <- round(get_eigenvalue(res.pca), 1)
+variance.percent <- eigenvalue$variance.percent
+head(eigenvalue)
+
+ggscatter(
+  ind.coord, x = "Dim.1", y = "Dim.2", 
+  color = "cluster", palette = "npg", ellipse = TRUE, ellipse.type = "convex",
+  size = 1.5,  legend = "right", ggtheme = theme_bw(),
+  xlab = paste0("Dim 1 (", variance.percent[1], "% )" ),
+  ylab = paste0("Dim 2 (", variance.percent[2], "% )" )
+) +  stat_mean(aes(color = cluster), size = 4)
+
+```
+
+
+
+# Percentage of variance explained by dimensions
+```{r}
+eigenvalue <- round(get_eigenvalue(res.pca), 1)
+variance.percent <- eigenvalue$variance.percent
+head(eigenvalue)
+```
+
+# Visualize k-means clusters
+# Color individuals according to the cluster groups
+# Add concentration ellipses
+# Add cluster centroid using the stat_mean() [ggpubr] R function
+```{r}
+
+ggscatter(
+  ind.coord, x = "Dim.1", y = "Dim.2", 
+  color = "cluster", palette = "npg", ellipse = TRUE, ellipse.type = "convex",
+   size = 1.5,  legend = "right", ggtheme = theme_bw(),
+  xlab = paste0("Dim 1 (", variance.percent[1], "% )" ),
+  ylab = paste0("Dim 2 (", variance.percent[2], "% )" )
+) +
+  stat_mean(aes(color = cluster), size = 4)
+
+
+library(ggplot2)
+head(k_mod6)
+head(df_mod6)
+
+library(plotly)
+
+head(df_mod6)
+
+nrow(df_mod6)
+
+df_mod6$cluster
+
+plot_ly(x=df_mod6$rec_bins, y=df_mod6$freq_bins, z=df_mod6$mon_bins, type="scatter3d", mode="markers", color=df_mod6$cluster)
+
+
+head(df_mod6,15)
+
+df_cluster1=df_mod6[df_mod6==1,]
+nrow(df_cluster1)
+df_cluster2=df_mod6[df_mod6==2,]
+nrow(df_cluster2)
+df_cluster3=df_mod6[df_mod6==3,]
+nrow(df_cluster3)
+df_cluster4=df_mod6[df_mod6==4,]
+nrow(df_cluster4)
+df_cluster5=df_mod6[df_mod6==5,]
+nrow(df_cluster5)
+df_cluster6=df_mod6[df_mod6==6,]
+nrow(df_cluster6)
+```
+
+
+
+
+
+#hierarchical clustering
+
+
+#scaling the variables in hierarchical clustering
+```{r}
+
+df_scale=scale(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],center=TRUE,scale=TRUE)
+
+
+summary(df_scale)
+dist_mat <- dist(df_scale, method = 'euclidean')
+```
+#plotting dendrogram
+```{r}
+
+hclust_avg <- hclust(dist_mat, method = 'ward.D2')
+plot(hclust_avg)
+```
+
+#creating the required number of clusters
+```{r}
+member = cutree(hclust_avg,6)
+
+h_clust=rfm_bin
+h_clust$cluster=member
+```
+
+
+#plotting the clusters formed using hierarchical clustering
+```{r}
+library(cluster)
+res.pca <- prcomp(h_clust[,c("mon_bins","rec_bins","freq_bins")],  scale = TRUE)
+# Coordinates of individuals
+ind.coord <- as.data.frame(get_pca_ind(res.pca)$coord)
+# Add clusters obtained using the K-means algorithm
+ind.coord$cluster <- factor(h_clust$cluster)
+# Data inspection
+
+
+
+ggscatter(
+  ind.coord, x = "Dim.1", y = "Dim.2", 
+  color = "cluster", palette = "npg", ellipse = TRUE, ellipse.type = "convex",
+  size = 1.5,  legend = "right", ggtheme = theme_bw(),
+  xlab = paste0("Dim 1 (", variance.percent[1], "% )" ),
+  ylab = paste0("Dim 2 (", variance.percent[2], "% )" )
+) +
+  stat_mean(aes(color = cluster), size = 4)
+```
+
+#shiloutte analysis
+
+```{r}
+
+df6_scale=data.frame(scale(rfm_bin[,c("mon_bins","rec_bins","freq_bins")],center=TRUE,scale=TRUE))
+k_mod6_1=kmeans(df6_scale,centers=6,nstart=25)
+k_mod6_1
+
+head(df6_scale)
+df6_scale$cluster=k_mod6_1$cluster
+
+head(df6_scale)
+
+library(cluster)
+
+s =silhouette(df6_scale$cluster, dist(df6_scale[,-4],method = 'euclidean'))
+
+plot(s, col=1:3, border=NA)
+```
+
+# the average silhoutte width is .43 ,more it is towards 1 the better
+
+#Silhoutte analysis for hierarchical clustering
+```{r}
+
+
+head(h_clust)
+
+s =silhouette(h_clust$cluster, dist(df6_scale,method = 'euclidean'))
+plot(s, col=1:3, border=NA)
+```
+
+#the average silhoutte width is .33 
+# which is lesser thaan kmeans
+
+#Increasing the number of clusters further
+```{r}
+
+k_mod8=kmeans(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],centers=8)
+
+df_mod8=cbind(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],"cluster"=k_mod8$cluster)
+df_mod8$cluster=as.factor(df_mod8$cluster)
+
+df_mod8$cluster
+
+head(k_mod8)
+```
+Accuracy of the cluster with number of clusters 8`r k_mod8$betweenss/k_mod8$totss`
+
+
+
+```{r}
+
+k_mod9=kmeans(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],centers=9)
+
+df_mod9=cbind(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],"cluster"=k_mod9$cluster)
+df_mod9$cluster=as.factor(df_mod9$cluster)
+
+df_mod9$cluster
+
+head(k_mod9)
+```
+
+# Within cluster sum of squares by cluster:
+#   [1] 340.9895 117.6919 386.8711 687.8474 926.0398 238.7811 989.9324 343.0778 109.8140
+# (between_SS / total_SS =  85.6 %)
+```{r}
+
+
+k_mod10=kmeans(rfm_bin[,c("rec_bins","freq_bins","mon_bins")],centers=10)
+
+df_mod10=cbind(rfm_bin[,c("custid","rec_bins","freq_bins","mon_bins")],"cluster"=k_mod10$cluster)
+df_mod10$cluster=as.factor(df_mod10$cluster)
+
+head(df_mod10)
+
+head(k_mod10)
+
+```
+#customer segmentation by clustering into 10 clusters
+#recency high(new customers) ,frequency low ,monetory all types
+```{r}
+df_cluster1=df_mod10[df_mod10$cluster==1,] #(x4-5x) high recency
+
+head(df_cluster1,20)  
+str(df_cluster1)
+
+library(plyr)
+# count(df_cluster1$rec_bins)
+# count(df_cluster1$freq_bins)
+# count(df_cluster1$mon_bins)
+nrow(df_cluster1)
+```
+
+#cluster 2 frequency high,recency high, monetory moderate to high,best customers
+
+```{r}
+
+df_cluster2=df_mod10[df_mod10$cluster==2,] 
+tail(df_cluster2,20) 
+nrow(df_cluster2)  
+# count(df_cluster2$rec_bins)
+# count(df_cluster2$freq_bins)
+# count(df_cluster2$mon_bins)
+```
+#cluster 3 average customers , low to average recency, frequency and spending capability
+```{r}
+df_cluster3=df_mod10[df_mod10$cluster==3,]
+nrow(df_cluster3)   
+# count(df_cluster3$rec_bins)
+# count(df_cluster3$freq_bins)
+# count(df_cluster3$mon_bins)
+
+View(df_cluster3) 
+```
+#cluster 4 recent buying customers,new
+```{r}
+
+
+df_cluster4=df_mod10[df_mod10$cluster==4,]
+nrow(df_cluster4)
+
+head(df_cluster4,15) 
+# count(df_cluster4$rec_bins)
+# count(df_cluster4$freq_bins)
+# count(df_cluster4$mon_bins)
+```
+#cluster 5 frequently buying customers loyal
+```{r}
+
+
+
+df_cluster5=df_mod10[df_mod10$cluster==5,]
+nrow(df_cluster5)
+
+# count(df_cluster5$rec_bins)
+# count(df_cluster5$freq_bins)
+# count(df_cluster5$mon_bins)
+
+
+tail(df_cluster5,15) 
+```
+#cluster 6 high paying customers having high frequency of buying
+```{r}
+df_cluster6=df_mod10[df_mod10$cluster==6,]
+
+
+
+tail(df_cluster6,15) 
+nrow(df_cluster6)
+
+
+# count(df_cluster6$rec_bins)
+# count(df_cluster6$freq_bins)
+# count(df_cluster6$mon_bins)
+
+```
+#cluster 7 slipping ....high paying customers having high frequency of buying  in the past but dont buy now
+```{r}
+df_cluster7=df_mod10[df_mod10$cluster==7,]
+tail(df_cluster7,15) 
+nrow(df_cluster6)
+
+
+# count(df_cluster7$rec_bins)
+# count(df_cluster7$freq_bins)
+# count(df_cluster7$mon_bins)
+```
+
+
+
+
+
+#cluster 8 low frequency customers who rarely buy but consist of low to high spenders
+
+```{r}
+df_cluster8=df_mod10[df_mod10$cluster==8,]
+tail(df_cluster8,15) 
+nrow(df_cluster8)
+
+
+# count(df_cluster8$rec_bins)
+# count(df_cluster8$freq_bins)
+# count(df_cluster8$mon_bins)
+```
+
+
+#cluster 9 recent  buyers frquent buyers, high spenders ,best customers
+```{r}
+df_cluster9=df_mod10[df_mod10$cluster==9,]
+
+tail(df_cluster9,15) 
+nrow(df_cluster9)
+
+
+# count(df_cluster9$rec_bins)
+# count(df_cluster9$freq_bins)
+# count(df_cluster9$mon_bins)
+```
+
+# cluster 10 low spenders, frequent buyers
+```{r}
+df_cluster10=df_mod10[df_mod10$cluster==10,]
+tail(df_cluster10,15) 
+nrow(df_cluster10)
+
+
+# count(df_cluster10$rec_bins)
+# count(df_cluster10$freq_bins)
+# count(df_cluster10$mon_bins)
+
+```
+
+
+#high valued customers have RFM score of 5,5,5
+```{r}
+df_mod10$customerID=rfm_bin$custid
+
+df_mod10[ df_mod6$rec_bins==5 & df_mod6$freq_bins==5 & df_mod6$mon_bins==5 ,]
+
+
+```
+#plot with 10 clusters
+```{r}
+
+res.pca <- prcomp(df_mod10[,c("mon_bins","rec_bins","freq_bins")],  scale = TRUE)
+# Coordinates of individuals
+ind.coord <- as.data.frame(get_pca_ind(res.pca)$coord)
+# Add clusters obtained using the K-means algorithm
+ind.coord$cluster <- factor(df_mod10$cluster)
+ggscatter(
+  ind.coord, x = "Dim.1", y = "Dim.2", 
+  color = "cluster", palette = "npg", ellipse = TRUE, ellipse.type = "convex",
+  size = 1.5,  legend = "right", ggtheme = theme_bw(),
+  xlab = paste0("Dim 1 (", variance.percent[1], "% )" ),
+  ylab = paste0("Dim 2 (", variance.percent[2], "% )" )
+) +
+  stat_mean(aes(color = cluster), size = 4)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
